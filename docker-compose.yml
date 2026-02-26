@@ -12,7 +12,7 @@ services:
   broadcast-daemon:
     build:
       context: .
-      dockerfile: stuff/broadcast-daemon/Dockerfile
+      dockerfile: broadcast-daemon/Dockerfile
     container_name: cw-read-msgs-broadcast-daemon
     restart: unless-stopped
     env_file: .env
