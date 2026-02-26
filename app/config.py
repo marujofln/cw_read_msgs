@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     chatwoot_account_ids: list[int]
     evolution_api_url: str | None = None
     evolution_api_key: str | None = None
+    redis_url: str | None = None
     log_level: str = "INFO"
     port: int = 3100
 

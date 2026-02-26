@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
+from redis.asyncio import Redis
 
 from app.config import get_settings
 from app.logging_config import setup_logging
@@ -20,9 +22,23 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-    """Manage the shared httpx client and ChatwootClient lifetime."""
+    """Manage the shared httpx client, ChatwootClient, and Redis lifetime."""
     settings = get_settings()
     setup_logging(settings.log_level)
+
+    redis_client: Redis | None = None
+    if settings.redis_url:
+        try:
+            redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
+            await redis_client.ping()
+            # Debug: show Redis URL (password redacted)
+            redacted_url = re.sub(r":([^@/:]+)@", ":***@", settings.redis_url)
+            logger.info("Redis connected: %s", redacted_url)
+        except Exception:
+            logger.warning("Redis unavailable — broadcast triggers disabled", exc_info=True)
+            redis_client = None
+
+    application.state.redis_client = redis_client
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as http_client:
         chatwoot_client = ChatwootClient(
@@ -58,6 +74,8 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         )
         yield
 
+    if redis_client:
+        await redis_client.aclose()
     logger.info("Service stopped")
 
 

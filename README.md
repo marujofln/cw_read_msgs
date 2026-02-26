@@ -18,6 +18,9 @@ this direction.
 3. It searches Chatwoot for the contact by phone number, finds the matching
    conversation in the correct inbox, and calls `update_last_seen` to clear the
    unread badge
+4. If `REDIS_URL` is set, it pushes a trigger to Redis; the **broadcast daemon**
+   consumes it and dispatches `CONVERSATION_READ` so the Chatwoot web UI updates
+   the unread counter in real time (without page refresh)
 
 ## Quick start
 
@@ -38,8 +41,23 @@ docker compose up -d
 | `CHATWOOT_BASE_URL` | yes | Chatwoot internal URL | `http://chatwoot_rails_1:3000` |
 | `CHATWOOT_API_TOKEN` | yes | Agent or admin API token | `abc123...` |
 | `CHATWOOT_ACCOUNT_IDS` | yes | Chatwoot account IDs (JSON list) | `[1]` or `[1,2,5]` |
+| `REDIS_URL` | no | Same Redis as Chatwoot — enables broadcast triggers for real-time UI | `redis://:PASSWORD@chatwoot-redis-1:6379/0` |
 | `LOG_LEVEL` | no | Logging level (default: `INFO`) | `DEBUG` |
 | `PORT` | no | Service port (default: `3100`) | `3100` |
+
+### Broadcast daemon (real-time UI)
+
+The `update_last_seen` API clears the badge, but the Chatwoot web UI may not update until the page is refreshed. The **broadcast daemon** fixes this by dispatching `CONVERSATION_READ` via ActionCable.
+
+The daemon runs as a container and must connect to the same Redis and PostgreSQL as Chatwoot, and needs `SECRET_KEY_BASE`. Add these to `.env` (copy values from your Chatwoot `.env`):
+
+```
+REDIS_URL=redis://:REDIS_PASSWORD@chatwoot-redis-1:6379/0
+DATABASE_URL=postgresql://postgres:POSTGRES_PASSWORD@chatwoot-postgres-1:5432/chatwoot
+SECRET_KEY_BASE=<copy from Chatwoot .env>
+```
+
+`docker compose up -d` starts both `cw-read-msgs` and `broadcast-daemon`. Both must be on the `chatwoot_default` network.
 
 ### Getting the Chatwoot API token
 

@@ -8,6 +8,7 @@ import re
 from fastapi import APIRouter, Request, Response
 
 from app.models import EvolutionWebhookPayload, MessageStatus, MessageUpdateData
+from app.services.redis_client import push_conversation_read_broadcast
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,12 @@ async def evolution_webhook(request: Request) -> Response:
                     )
                     if success:
                         processed += 1
+                        redis_client = getattr(
+                            request.app.state, "redis_client", None
+                        )
+                        await push_conversation_read_broadcast(
+                            redis_client, account_id, conv_id
+                        )
                     continue
             logger.warning(
                 "No Chatwoot contact found for %s (instance=%s, jid_type=%s)",
@@ -223,6 +230,10 @@ async def evolution_webhook(request: Request) -> Response:
         )
         if success:
             processed += 1
+            redis_client = getattr(request.app.state, "redis_client", None)
+            await push_conversation_read_broadcast(
+                redis_client, account_id, conv_id
+            )
 
     return Response(
         content=(
