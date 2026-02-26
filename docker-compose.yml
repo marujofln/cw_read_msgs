@@ -1,0 +1,14 @@
+services:
+  cw-read-msgs:
+    build: .
+    container_name: cw-read-msgs
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    env_file: .env
+    networks:
+      - chatwoot_default
+
+networks:
+  chatwoot_default:
+    external: true
