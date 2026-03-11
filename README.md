@@ -41,6 +41,8 @@ docker compose up -d
 | `CHATWOOT_BASE_URL` | yes | Chatwoot internal URL | `http://chatwoot_rails_1:3000` |
 | `CHATWOOT_API_TOKEN` | yes | Agent or admin API token | `abc123...` |
 | `CHATWOOT_ACCOUNT_IDS` | yes | Chatwoot account IDs (JSON list) | `[1]` or `[1,2,5]` |
+| `EVOLUTION_API_URL` | no | Evolution API base URL — enables LID resolution | `http://evolution_api:8080` |
+| `EVOLUTION_API_KEY` | no | Evolution API key (required if URL is set) | `your-evolution-api-key` |
 | `REDIS_URL` | no | Same Redis as Chatwoot — enables broadcast triggers for real-time UI | `redis://:PASSWORD@chatwoot-redis-1:6379/0` |
 | `LOG_LEVEL` | no | Logging level (default: `INFO`) | `DEBUG` |
 | `PORT` | no | Service port (default: `3100`) | `3100` |
@@ -58,6 +60,10 @@ SECRET_KEY_BASE=<copy from Chatwoot .env>
 ```
 
 `docker compose up -d` starts both `cw-read-msgs` and `broadcast-daemon`. Both must be on the `chatwoot_default` network.
+
+### Evolution API (LID resolution)
+
+If read receipts use **Linked ID (LID)** JIDs (e.g. `54958938411215@lid` instead of phone JIDs), set `EVOLUTION_API_URL` and `EVOLUTION_API_KEY` to enable LID-to-phone resolution. Without these, the service logs "Evolution API not configured — LID resolution disabled" and LID receipts may not match Chatwoot contacts.
 
 ### Getting the Chatwoot API token
 
