@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections.abc import AsyncIterator
@@ -13,20 +14,23 @@ from redis.asyncio import Redis
 
 from app.config import get_settings
 from app.logging_config import setup_logging
+from app.routers.chatwoot import router as chatwoot_router
 from app.routers.evolution import router as evolution_router
 from app.services.chatwoot import ChatwootClient
 from app.services.evolution import EvolutionClient
+from app.services.pg_listener import run_pg_listener
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-    """Manage the shared httpx client, ChatwootClient, and Redis lifetime."""
+    """Manage the shared httpx client, ChatwootClient, Redis, and PG listener."""
     settings = get_settings()
     setup_logging(settings.log_level)
 
     redis_client: Redis | None = None
+    pg_listener_task: asyncio.Task[None] | None = None
     if settings.redis_url:
         try:
             redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
@@ -67,12 +71,34 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             )
         application.state.evolution_client = evolution_client
 
+        if settings.chatwoot_database_url and evolution_client:
+            pg_listener_task = asyncio.create_task(
+                run_pg_listener(
+                    settings.chatwoot_database_url,
+                    chatwoot_client,
+                    evolution_client,
+                ),
+            )
+            logger.info("PG listener started (Layer 2: agent view detection)")
+        elif settings.chatwoot_database_url and not evolution_client:
+            logger.warning(
+                "CHATWOOT_DATABASE_URL set but Evolution API not configured — "
+                "PG listener disabled",
+            )
+
         logger.info(
             "Service started — Chatwoot: %s (accounts: %s)",
             settings.chatwoot_base_url,
             settings.chatwoot_account_ids,
         )
         yield
+
+    if pg_listener_task is not None:
+        pg_listener_task.cancel()
+        try:
+            await pg_listener_task
+        except asyncio.CancelledError:
+            pass
 
     if redis_client:
         await redis_client.aclose()
@@ -82,14 +108,16 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Chatwoot Read Sync",
     description=(
-        "Marks Chatwoot conversations as read when messages are "
-        "read on the WhatsApp phone app via Evolution API webhooks."
+        "Bidirectional read sync between Chatwoot and WhatsApp via Evolution API: "
+        "(1) WhatsApp→Chatwoot: marks Chatwoot as read when messages are read on phone; "
+        "(2) Chatwoot→WhatsApp: sends read receipts when agents view or reply in Chatwoot."
     ),
     version="1.0.0",
     lifespan=lifespan,
 )
 
 app.include_router(evolution_router)
+app.include_router(chatwoot_router)
 
 
 @app.get("/health")

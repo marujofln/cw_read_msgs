@@ -55,3 +55,75 @@ class EvolutionWebhookPayload(BaseModel):
         if isinstance(self.data, list):
             return self.data
         return [self.data]
+
+
+# ---------------------------------------------------------------------------
+# Chatwoot webhook models (for message_created and related events)
+# ---------------------------------------------------------------------------
+
+
+class ChatwootWebhookAccount(BaseModel):
+    """Account object in Chatwoot webhook payload."""
+
+    id: int
+    name: str | None = None
+
+
+class ChatwootWebhookInbox(BaseModel):
+    """Inbox object in Chatwoot webhook payload."""
+
+    id: int
+    name: str | None = None
+    channel_type: str | None = None
+
+
+class ChatwootWebhookContact(BaseModel):
+    """Contact object in Chatwoot webhook payload."""
+
+    id: int
+    name: str | None = None
+    identifier: str | None = None
+    phone_number: str | None = None
+
+
+class ChatwootWebhookContactInbox(BaseModel):
+    """Contact inbox (conversation metadata) in Chatwoot webhook."""
+
+    source_id: str | None = None
+
+
+class ChatwootWebhookConversation(BaseModel):
+    """Conversation object in Chatwoot webhook payload."""
+
+    id: int
+    display_id: int | None = None
+    inbox_id: int | None = None
+    meta: dict | None = None
+    contact_inbox: ChatwootWebhookContactInbox | None = None
+    messages: list[dict] | None = None
+
+
+class ChatwootWebhookPayload(BaseModel):
+    """Top-level Chatwoot webhook payload (e.g. message_created, conversation_updated).
+
+    Used for Layer 1: detect agent replies and trigger WhatsApp read receipts.
+    """
+
+    event: str
+    id: int | None = None
+    content: str | None = None
+    message_type: str | None = None
+    account: ChatwootWebhookAccount | None = None
+    inbox: ChatwootWebhookInbox | None = None
+    contact: ChatwootWebhookContact | None = None
+    conversation: ChatwootWebhookConversation | None = None
+
+
+class PgNotifyConversationRead(BaseModel):
+    """Payload emitted by PostgreSQL trigger on agent_last_seen_at update.
+
+    Used for Layer 2: detect agent viewing conversation without replying.
+    """
+
+    conversation_id: int
+    account_id: int

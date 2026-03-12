@@ -121,3 +121,64 @@ class EvolutionClient:
         except Exception:
             logger.exception("Failed to resolve LID %s via Evolution API", lid_jid)
             return None
+
+    async def mark_messages_as_read(
+        self,
+        instance_name: str,
+        remote_jid: str,
+        message_ids: list[str],
+    ) -> bool:
+        """Send read receipts to WhatsApp via Evolution API.
+
+        Marks incoming messages (fromMe=false) as read so the customer sees blue
+        checkmarks.
+
+        Args:
+            instance_name: The Evolution instance name.
+            remote_jid: The WhatsApp JID (e.g. 5511999999999@s.whatsapp.net or
+                LID JID).
+            message_ids: List of WhatsApp message key IDs (source_id from Chatwoot).
+
+        Returns:
+            True if the API call succeeded, False otherwise.
+        """
+        if not message_ids:
+            logger.debug("No message IDs to mark as read")
+            return True
+
+        url = f"{self._base}/chat/markMessageAsRead/{instance_name}"
+        read_messages = [
+            {"remoteJid": remote_jid, "fromMe": False, "id": mid}
+            for mid in message_ids
+        ]
+        payload = {"readMessages": read_messages}
+
+        logger.debug(
+            "Evolution API: POST %s for %d message(s)",
+            url,
+            len(message_ids),
+        )
+
+        try:
+            resp = await self._http.post(
+                url,
+                headers=self._headers(),
+                json=payload,
+            )
+            resp.raise_for_status()
+            logger.info(
+                "Marked %d message(s) as read for %s via Evolution API",
+                len(message_ids),
+                remote_jid,
+            )
+            return True
+        except httpx.HTTPStatusError as e:
+            logger.warning(
+                "Evolution API error marking messages read: HTTP %d %s",
+                e.response.status_code,
+                e.response.text[:200] if e.response.text else "",
+            )
+            return False
+        except Exception:
+            logger.exception("Failed to mark messages as read via Evolution API")
+            return False

@@ -447,6 +447,104 @@ class ChatwootClient:
         )
         return None
 
+    async def get_conversation_messages(
+        self,
+        account_id: int,
+        conversation_id: int,
+        *,
+        message_type: str | None = "incoming",
+    ) -> list[dict[str, Any]]:
+        """Fetch messages from a conversation.
+
+        Returns messages with their source_id (WhatsApp message key ID for API
+        channel messages). Used to collect message IDs to mark as read on WhatsApp.
+
+        Args:
+            account_id: Chatwoot account ID.
+            conversation_id: Conversation ID (internal id, not display_id).
+            message_type: Filter by message_type ('incoming', 'outgoing', or None for all).
+
+        Returns:
+            List of message dicts with at least 'id', 'message_type', 'source_id' keys.
+        """
+        messages: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            try:
+                data = await self._get(
+                    account_id,
+                    f"/conversations/{conversation_id}/messages",
+                    page=page,
+                )
+            except httpx.HTTPStatusError:
+                logger.exception(
+                    "Failed to fetch messages for conversation %d",
+                    conversation_id,
+                )
+                break
+
+            payload = data.get("data", []) if isinstance(data, dict) else data
+            if not isinstance(payload, list):
+                payload = []
+
+            for msg in payload:
+                msg_type = msg.get("message_type")
+                if message_type and msg_type != message_type:
+                    continue
+                messages.append(msg)
+
+            if len(payload) < 20:
+                break
+            page += 1
+
+        return messages
+
+    async def get_contact_whatsapp_jid(
+        self,
+        account_id: int,
+        contact_id: int,
+        inbox_id: int,
+    ) -> str | None:
+        """Get the contact's WhatsApp JID (source_id) for a specific inbox.
+
+        The source_id is the WhatsApp identifier: phone JID (5511999999999@s.whatsapp.net)
+        or LID JID (54958938411215@lid).
+        """
+        return await self.get_contact_source_id(
+            account_id, contact_id, inbox_id,
+        )
+
+    def resolve_instance_name(self, account_id: int, inbox_id: int) -> str | None:
+        """Return the Evolution instance name (inbox name) for the given account and inbox."""
+        for name, entry in self._inbox_map.items():
+            if entry.get("account_id") == account_id and entry.get("inbox_id") == inbox_id:
+                return name
+        return None
+
+    async def get_conversation_inbox_id(
+        self,
+        account_id: int,
+        conversation_id: int,
+    ) -> int | None:
+        """Get the inbox_id for a conversation."""
+        try:
+            data = await self._get(
+                account_id,
+                f"/conversations/{conversation_id}",
+            )
+        except httpx.HTTPStatusError:
+            logger.exception(
+                "Failed to get conversation %d details",
+                conversation_id,
+            )
+            return None
+        conv = data if isinstance(data, dict) else {}
+        inbox_id = conv.get("inbox_id")
+        if inbox_id is not None:
+            return int(inbox_id)
+        inbox = conv.get("inbox") or {}
+        return inbox.get("id")
+
     async def get_conversation_source_id(
         self,
         account_id: int,
