@@ -25,6 +25,9 @@ this direction.
 ## Quick start
 
 ```bash
+git clone https://github.com/marujofln/cw_read_msgs.git
+cd cw_read_msgs
+
 # 1. Copy and edit the environment file
 cp .env.example .env
 
